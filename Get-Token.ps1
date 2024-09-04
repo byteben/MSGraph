@@ -3,7 +3,7 @@
     This script can be used to obtain an authnetication token
 
 .DESCRIPTION
-    This script will use the MSAL.PS PowerShell module to obtain an authentication token and create an authorization header which can be used when scripting with Microsoft Graph 
+    This script will use the MSAL.PS PowerShell module to obtain an authentication token which can be used when scripting with Microsoft Graph 
 
 .NOTES
 
@@ -15,29 +15,30 @@
 .PARAMETER TenantName
 Specify the tenant name to connect to e.g bytebenlab.com
 
-.PARAMETER Scope
-Specify the scope to install the MSAL.PS module if it is missing. Valid Scopes are "CurrentUser" and "AllUsers"
-
 .PARAMETER Context
 Specify whether the token should be obtained interactively or with a device code. Valid contexts are "Interactive" and "DeviceCode"
 
+.PARAMETER ClientID
+Specify the Azure app registration to use
+
 .EXAMPLE
-Get-Token.ps1 -TenantName 'bytebenlab.com' -Context 'Interactive' -Scope 'CurrentUser'
+Get-Token.ps1 -TenantName 'bytebenlab.com' -Context 'Interactive' -Scope 'CurrentUser' -ClientID '9a5663eb-7dd3-41c6-80a2-70ba3e7cfbdf'
 
 #>
 [cmdletbinding()]
 Param (
-    [Parameter(Mandatory)]
+    [Parameter()]
     [ValidateNotNullOrEmpty()]
-    [String]$TenantName,
-    [Parameter(Mandatory)]
-    [ValidateNotNullOrEmpty()]
-    [ValidateSet('CurrentUser', 'AllUsers')]
-    [String]$Scope,
-    [Parameter(Mandatory)]
+    [String]$TenantName = "",
+    [String]$ClientID = "", #Replace with the CLientID from your Azure app registration
+    [Parameter()]
     [ValidateNotNullOrEmpty()]
     [ValidateSet('DeviceCode', 'Interactive')]
-    [String]$Context
+    [String]$Context = "Interactive",
+    [Parameter()]
+    [ValidateNotNullOrEmpty()]
+    [ValidateSet('CurrentUser', 'AllUsers')]
+    [String]$Scope = "CurrentUser"
 
 )
 Function Get-ReqModule {
@@ -79,7 +80,6 @@ Function Get-ReqModule {
 
 #Set Application to use
 $Module = "MSAL.PS"
-$ClientID = '14d82eec-204b-4c2f-b7e8-296a70dab67e' #Microsoft Graph PowerShell Application ID
 
 #Set Verbose Level
 $VerbosePreference = "Continue"
@@ -98,8 +98,5 @@ $AuthParams = @{
 #Get a Token
 $AuthToken = Get-MsalToken @AuthParams
 
-#Create HTTP basic auth header i.e base64-encoded username/password
-$BasicAuthHeader = @{Authorization = $AuthToken.CreateAuthorizationHeader()}
-
-#Disaply auth Header
-$BasicAuthHeader 
+#Display Access Token to be used for Graph API requests
+$AuthToken.AccessToken
