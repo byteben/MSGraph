@@ -1,102 +1,53 @@
-<#
-.SYNOPSIS
-    This script can be used to obtain an authnetication token
+$tenantId = ""
+$clientId = ""
+$redirectUri = "http://localhost:8080"
+$scope = "User.Read" 
 
-.DESCRIPTION
-    This script will use the MSAL.PS PowerShell module to obtain an authentication token which can be used when scripting with Microsoft Graph 
+# Start local HTTP listener
+$http = [System.Net.HttpListener]::new()
+$http.Prefixes.Add($redirectUri + "/")
+Write-Host "Starting HTTP listener..."
+$http.Start()
+Write-Host "HTTP listener started and listening..."
 
-.NOTES
+# Construct the authorization URL
+$authUrl = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/authorize" `
+    + "?client_id=$clientId" `
+    + "&response_type=code" `
+    + "&redirect_uri=$redirectUri" `
+    + "&scope=$scope"
 
-    FileName:    Get-Token.ps1
-    Author:      Ben Whitmore
-    Contact:     @byteben
-    Date:        7th August 2022
+Write-Host "Opening authentication URL..."
+Start-Process $authUrl
 
-.PARAMETER TenantName
-Specify the tenant name to connect to e.g bytebenlab.com
+# Wait for the authorization response
+$context = $http.GetContext()
+$request = $context.Request
+$response = $context.Response
 
-.PARAMETER Context
-Specify whether the token should be obtained interactively or with a device code. Valid contexts are "Interactive" and "DeviceCode"
+# Extract the authorization code from the query string
+$code = $request.QueryString["code"]
 
-.PARAMETER ClientID
-Specify the Azure app registration to use
+# Send a response to the browser
+$buffer = [System.Text.Encoding]::UTF8.GetBytes("Authentication complete cheese man! You can close this window.")
+$response.ContentLength64 = $buffer.Length
+$response.OutputStream.Write($buffer, 0, $buffer.Length)
+$response.OutputStream.Close()
 
-.EXAMPLE
-Get-Token.ps1 -TenantName 'bytebenlab.com' -Context 'Interactive' -Scope 'CurrentUser' -ClientID '9a5663eb-7dd3-41c6-80a2-70ba3e7cfbdf'
-
-#>
-[cmdletbinding()]
-Param (
-    [Parameter()]
-    [ValidateNotNullOrEmpty()]
-    [String]$TenantName = "",
-    [String]$ClientID = "", #Replace with the CLientID from your Azure app registration
-    [Parameter()]
-    [ValidateNotNullOrEmpty()]
-    [ValidateSet('DeviceCode', 'Interactive')]
-    [String]$Context = "Interactive",
-    [Parameter()]
-    [ValidateNotNullOrEmpty()]
-    [ValidateSet('CurrentUser', 'AllUsers')]
-    [String]$Scope = "CurrentUser"
-
-)
-Function Get-ReqModule {
-    Param (
-        [Parameter(Mandatory)]
-        [String]$ModuleName,
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [ValidateSet('CurrentUser', 'AllUsers')]
-        [String]$Scope,
-        [Parameter()]
-        [Switch]$Install
-    )
-
-    #Check if module is installed
-    $ModuleStatus = Get-Module -Name $ModuleName
-
-    If (-not($ModuleStatus)) {
-        Write-Verbose "$($ModuleName) is not currently installed"
-
-        If ($Install) {
-
-            #Install module
-            Write-Verbose "Installing $($Module)"
-            Try {
-                Install-Module -Name $ModuleName -Scope $Scope
-            }
-            Catch {
-                Write-Verbose "Error installing $($ModuleName)"
-                $_
-                break
-            }
-        }
-    }
-    else {
-        Write-Verbose "$($ModuleName) is installed"
-    }
+# Exchange the code for an access token
+$tokenUrl = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token"
+$body = @{
+    client_id    = $clientId
+    code         = $code
+    redirect_uri = $redirectUri
+    grant_type   = "authorization_code"
+    scope        = $scope
 }
 
-#Set Application to use
-$Module = "MSAL.PS"
+$token = Invoke-RestMethod -Uri $tokenUrl -Method Post -Body $body
 
-#Set Verbose Level
-$VerbosePreference = "Continue"
-#$VerbosePreference = "SilentlyContinue"
+# Clean up
+$http.Stop()
+$http.Close()
 
-#Check required modules are installed, if not install them
-Get-ReqModule -ModuleName $Module -Scope $Scope -Install
-
-#Build auth params
-$AuthParams = @{
-    ClientId = $ClientID
-    TenantId = $TenantName
-    $Context = $true
-}
-
-#Get a Token
-$AuthToken = Get-MsalToken @AuthParams
-
-#Display Access Token to be used for Graph API requests
-$AuthToken.AccessToken
+Write-Host "Access Token: $($token.access_token)"
